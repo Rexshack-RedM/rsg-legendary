@@ -15,7 +15,7 @@ Config.Trappers = {
         blip = { enabled = true, sprite = `blip_shop_animal_trapper`, name = 'blip_trapper' }  -- locale key,
     },
 }
-Config.TrapperInteractDistance = 3.0   -- ox_target distance
+Config.TrapperInteractDistance = 3.0   -- rsg-target distance
 Config.TrapperServerDistance   = 6.0   -- server-side check for buy/sell
 Config.TrapperSpawnDistance    = 80.0  -- trapper ped only exists while a player is this close
 
@@ -27,7 +27,7 @@ Config.HuntDuration    = 60 * 60        -- seconds a started hunt stays active
 Config.ClueCount       = 3              -- clues to inspect before the animal appears
 Config.ClueSpread      = 120.0          -- clues are scattered this far from the zone centre (metres, 2D)
 Config.RouteToClue       = true         -- draw a GPS route to the next clue
-Config.ClueZoneDistance   = 40.0         -- ox_target clue zone is created once you're this close (terrain is loaded)
+Config.ClueZoneDistance   = 40.0         -- clue prompt is armed once you're this close (terrain is loaded)
 Config.ClueTargetDistance = 3.0          -- how close you must be for the 'Inspect tracks' prompt to show
 Config.CluePromptKey      = 0xCEFD9220   -- E (RSGCore.Shared.Keybinds['E'])
 Config.CluePromptHold     = 1000         -- ms to hold the key
@@ -35,13 +35,59 @@ Config.ClueInspectDist = 4.0            -- server check: player must be this clo
 Config.ClueInspectTime = 5000           -- ms crouch-inspect
 Config.ClueScenario    = `WORLD_HUMAN_CROUCH_INSPECT`  -- rdr3_discoveries/animations/scenarios
 Config.SpawnOffset     = 60.0           -- animal spawns this far beyond the last clue
-Config.ActivateDistance = 120.0         -- clue zone / animal is created once you are this close
-Config.SkinFallbackDelay = 15          -- seconds after death before an ox_target 'Skin' option appears (0 = never). Covers models with no native skin prompt
-Config.SkinTime        = 8000           -- ms progress bar for ox_target skinning
+Config.ActivateDistance = 120.0         -- the legendary spawns once you are this close to its spawn point
+Config.SkinFallbackDelay = 15          -- seconds after death before an rsg-target 'Skin' option appears (0 = never). Covers models with no native skin prompt
+Config.SkinTime        = 8000           -- ms progress bar for rsg-target skinning
 Config.DeleteCarriedPelt = true        -- remove the vanilla pelt the game puts on your shoulder (you get the RSG items instead)
 Config.SkinMaxDistance = 6.0            -- server: player must be this close to the carcass
 Config.CooldownHours   = 24             -- per player, per legendary animal
 Config.MoneyType       = 'cash'
+
+---------------------------------
+-- Kill quality: a legendary killed with one of these weapons counts as a 'perfect' kill
+-- (weapon names from rdr3_discoveries/weapons). Perfect kills multiply the trinket rewards.
+---------------------------------
+Config.Quality = {
+    Enabled        = true,
+    PerfectWeapons = { `WEAPON_BOW`, `WEAPON_BOW_IMPROVED`, `WEAPON_MELEE_KNIFE`, `WEAPON_THROWN_THROWING_KNIVES`, `WEAPON_RIFLE_VARMINT` },
+    TrinketMult    = 2,       -- perfect kill: trinket amounts x this (the pelt stays at 1)
+}
+
+-- Rare bonus: chance of one extra of the animal's trinket on any kill
+Config.BonusTrinketChance = 0.10   -- 0.0 - 1.0
+
+---------------------------------
+-- Trophy board (trapper menu tab): first kill and fastest hunt per legendary
+---------------------------------
+Config.Trophies = {
+    Enabled  = true,
+    CacheSec = 60,            -- board is cached this long on the server
+}
+
+---------------------------------
+-- Group hunts: the hunt owner invites nearby players (/invitehunt id, they /accepthunt).
+-- Members see the trail; members near the carcass when it's skinned get the trinket rewards.
+---------------------------------
+Config.Group = {
+    Enabled        = true,
+    MaxMembers     = 3,       -- not counting the owner
+    InviteDistance = 10.0,
+    InviteTimeout  = 60,      -- seconds to accept
+    ShareDistance  = 30.0,    -- members within this distance of the carcass share rewards
+}
+
+---------------------------------
+-- Active hunts are saved and restored on relog / restart (until they expire)
+---------------------------------
+Config.SaveHunts = true
+
+---------------------------------
+-- rsg-telegram: the trapper sends a telegram when a legendary is off cooldown
+---------------------------------
+Config.CooldownTelegram = {
+    Enabled  = true,
+    CheckMin = 5,             -- how often the server checks (minutes)
+}
 
 -- Hunting XP requirement for buying maps (XP comes from rsg-hunting: exports['rsg-hunting']:GetHuntingXP,
 -- stored as player rep 'hunting'). Each animal can set its own minXP; otherwise DefaultMinXP is used.
@@ -65,7 +111,7 @@ Config.ClueBlipStyle = `BLIP_STYLE_OBJECTIVE`
 --       Zone centres are approximate - stand in the spot you want in-game and update them.
 -- aggressive: true = attacks the hunter when it appears, false = wanders/flees
 -- healthMult: multiplier on the model's normal max health
--- skin: 'native' (default, game skinning prompt) or 'target' (ox_target + progress bar)
+-- skin: 'native' (default, game skinning prompt) or 'target' (rsg-target + progress bar)
 ---------------------------------
 Config.Animals = {
     bear = {
@@ -183,9 +229,8 @@ Config.SellPrices = {
 }
 
 ---------------------------------
--- Localised names (ox_lib locales/*.json, language set by the ox:locale convar)
+-- Localised names (rsg-core locales, language set by the rsg:locale convar)
 ---------------------------------
-lib.locale()
 for key, a in pairs(Config.Animals) do
     a.label = locale('animal_' .. key)
     a.description = locale('animal_' .. key .. '_desc')

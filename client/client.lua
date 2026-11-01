@@ -1,10 +1,9 @@
 local RSGCore = exports['rsg-core']:GetCoreObject()
-lib.locale()
 
 local trappers = {}    -- [i] = { ped, blip }
 local uiOpen = false
 local cluePrompt = nil -- native 'Inspect tracks' prompt (registered once)
-local hunt = nil       -- { animal, label, total, found, clue, spawn, zoneBlip, clueBlip, clueZone, ped, pedBlip, dead, deadAt, skinTarget }
+local hunt = nil       -- { animal, total, found, clue, spawn, zoneBlip, clueBlip, clueZone, ped, pedBlip, dead, deadAt, skinTarget }
 local skinning = false
 local previewPed, previewToken = nil, 0
 
@@ -21,7 +20,11 @@ local function nameBlip(blip, text) Citizen.InvokeNative(0x9CB1A1623062F402, bli
 local function carriedEntity(ped) return Citizen.InvokeNative(0xD806CD2A4F2C2996, ped) end                              -- _GET_FIRST_ENTITY_PED_IS_CARRYING
 
 local function notify(desc, ntype)
-    lib.notify({ title = locale('title'), description = desc, type = ntype or 'inform' })
+    RSGCore.Functions.Notify({ title = locale('title'), description = desc, type = ntype or 'inform', duration = 5000 })
+end
+
+local function await(name, ...)
+    return RSGCore.Functions.AwaitCallback(name, 10000, ...)
 end
 
 local function loadModel(model)
@@ -44,9 +47,9 @@ local function groundZ(x, y, fromZ)
 end
 
 local function crouchProgress(duration, label)
-    local me = cache.ped
+    local me = PlayerPedId()
     TaskStartScenarioInPlaceHash(me, Config.ClueScenario, duration, true, 0, -1.0, false)
-    local ok = lib.progressBar({ duration = duration, label = label, canCancel = true, disable = { move = true, combat = true } })
+    local ok = RSGCore.Functions.ProgressBar({ duration = duration, label = label, canCancel = true, disable = { move = true, combat = true, mount = true } })
     ClearPedTasks(me)
     return ok
 end
@@ -62,12 +65,13 @@ local function closeUI()
 end
 
 local function refreshUI()
-    local data = lib.callback.await('rsg-legendary:server:getMenu', false)
+    local data = await('rsg-legendary:server:getMenu')
     if data then SendNUIMessage({ action = 'refresh', data = data }) else closeUI() end
 end
 
 local function openTrapper()
-    local data = lib.callback.await('rsg-legendary:server:getMenu', false)
+    if uiOpen then return end
+    local data = await('rsg-legendary:server:getMenu')
     if not data then return end
     uiOpen = true
     SetNuiFocus(true, true)
@@ -75,19 +79,21 @@ local function openTrapper()
         title = locale('ui_title'), subtitle = locale('ui_subtitle'), maps = locale('ui_maps'), sell = locale('ui_sell'),
         sellall = locale('ui_sellall'), cooldown = locale('ui_cooldown'), nothing = locale('ui_nothing'), cash = locale('ui_cash'),
         each = locale('ui_each'), needxp = locale('ui_needxp'), xp = locale('ui_xp'),
+        trophies = locale('ui_trophies'), first = locale('ui_first'), fastest = locale('ui_fastest'),
+        yours = locale('ui_yours'), noneyet = locale('ui_none_yet'), perfect = locale('ui_perfect'),
     } })
 end
 
 RegisterNUICallback('close', function(_, cb) closeUI() cb('ok') end)
 
 RegisterNUICallback('buy', function(body, cb)
-    lib.callback.await('rsg-legendary:server:buyMap', false, body.key)
+    await('rsg-legendary:server:buyMap', body.key)
     refreshUI()
     cb('ok')
 end)
 
 RegisterNUICallback('sell', function(body, cb)
-    lib.callback.await('rsg-legendary:server:sell', false, body.item)
+    await('rsg-legendary:server:sell', body.item)
     refreshUI()
     cb('ok')
 end)
@@ -104,7 +110,7 @@ local function spawnTrapper(i, t)
     FreezeEntityPosition(ped, true)
     SetBlockingOfNonTemporaryEvents(ped, true)
     SetPedCanBeTargetted(ped, false)
-    exports.ox_target:addLocalEntity(ped, {
+    exports['rsg-target']:addLocalEntity(ped, {
         { name = 'rsg_legendary_trapper', icon = 'fa-solid fa-paw', label = locale('target_trapper'),
           distance = Config.TrapperInteractDistance, onSelect = openTrapper },
     })
@@ -114,7 +120,7 @@ end
 local function despawnTrapper(i)
     local ped = trappers[i].ped
     if ped and DoesEntityExist(ped) then
-        exports.ox_target:removeLocalEntity(ped)
+        exports['rsg-target']:removeLocalEntity(ped)
         DeleteEntity(ped)
     end
     trappers[i].ped = nil
@@ -131,7 +137,7 @@ CreateThread(function()
         end
     end
     while true do
-        local pos = GetEntityCoords(cache.ped)
+        local pos = GetEntityCoords(PlayerPedId())
         for i, t in ipairs(Config.Trappers) do
             local near = #(pos - t.coords.xyz) < Config.TrapperSpawnDistance
             if near and not trappers[i].ped then spawnTrapper(i, t)
@@ -157,7 +163,7 @@ local function endHunt()
     if hunt.zoneBlip then RemoveBlip(hunt.zoneBlip) end
     if hunt.pedBlip then RemoveBlip(hunt.pedBlip) end
     if hunt.ped and DoesEntityExist(hunt.ped) then
-        if hunt.skinTarget then exports.ox_target:removeLocalEntity(hunt.ped) end
+        if hunt.skinTarget then exports['rsg-target']:removeLocalEntity(hunt.ped) end
         DeleteEntity(hunt.ped)
     end
     hunt = nil
@@ -167,7 +173,7 @@ local function placeClueBlip()
     hunt.clueBlip = blipForCoords(Config.ClueBlipStyle, hunt.clue)
     nameBlip(hunt.clueBlip, locale('blip_clue'))
     if Config.RouteToClue then   -- GPS line to the next tracks (RedM GPS multi-route natives)
-        local z = groundZ(hunt.clue.x, hunt.clue.y) or GetEntityCoords(cache.ped).z
+        local z = groundZ(hunt.clue.x, hunt.clue.y) or GetEntityCoords(PlayerPedId()).z
         ClearGpsMultiRoute()
         StartGpsMultiRoute(joaat('COLOR_YELLOW'), true, true)
         AddPointToGpsMultiRoute(hunt.clue.x, hunt.clue.y, z)
@@ -179,7 +185,7 @@ local function inspectClue()
     if not hunt or not hunt.clue then return end
     if not crouchProgress(Config.ClueInspectTime, locale('inspecting')) or not hunt then return end
 
-    local res = lib.callback.await('rsg-legendary:server:inspectClue', false)
+    local res = await('rsg-legendary:server:inspectClue')
     if not hunt then return end   -- hunt ended (e.g. expired) while waiting
     if not res then notify(locale('clue_failed'), 'error') return end
 
@@ -217,8 +223,8 @@ local function activateClue(z)
         while hunt and hunt.clueZone do
             local sleep = 500
             local clue = vector3(hunt.clue.x, hunt.clue.y, hunt.clueZ)
-            local near = not busy and #(GetEntityCoords(cache.ped) - clue) < Config.ClueTargetDistance
-                and not IsPedOnMount(cache.ped) and not IsPedInAnyVehicle(cache.ped, false)
+            local near = not busy and #(GetEntityCoords(PlayerPedId()) - clue) < Config.ClueTargetDistance
+                and not IsPedOnMount(PlayerPedId()) and not IsPedInAnyVehicle(PlayerPedId(), false)
             PromptSetEnabled(prompt, near)
             PromptSetVisible(prompt, near)
             if near then
@@ -239,7 +245,10 @@ end
 
 local function spawnAnimal(z)
     local cfg = Config.Animals[hunt.animal]
-    if not loadModel(cfg.model) then notify(locale('spawn_failed'), 'error') return end
+    if not loadModel(cfg.model) then
+        hunt.spawnRetry = GetGameTimer() + 15000   -- don't spam the notify every tick
+        notify(locale('spawn_failed'), 'error') return
+    end
     local s = hunt.spawn
     local ped = CreatePed(cfg.model, s.x, s.y, z, math.random(0, 359) + 0.0, true, true, false, false)
     SetModelAsNoLongerNeeded(cfg.model)
@@ -254,7 +263,7 @@ local function spawnAnimal(z)
     if cfg.aggressive then
         SetPedCombatAttributes(ped, 5, true)    -- ALWAYS_FIGHT
         SetPedCombatAttributes(ped, 58, true)   -- DISABLE_FLEE_FROM_COMBAT
-        TaskCombatPed(ped, cache.ped, 0, 16)
+        TaskCombatPed(ped, PlayerPedId(), 0, 16)
     else
         TaskWanderInArea(ped, s.x, s.y, z, 40.0, 0, 0, 0)
     end
@@ -266,17 +275,17 @@ local function spawnAnimal(z)
     notify(locale('animal_appeared', cfg.label), 'warning')
 end
 
--- claim rewards for the carcass (native skin or ox_target fallback)
+-- claim rewards for the carcass (native skin or rsg-target fallback)
 local function claimSkin()
     if skinning or not hunt or not hunt.ped then return end
     skinning = true
-    local ok = lib.callback.await('rsg-legendary:server:skin', false, NetworkGetNetworkIdFromEntity(hunt.ped))
+    local ok = await('rsg-legendary:server:skin', NetworkGetNetworkIdFromEntity(hunt.ped))
     if ok then
         if hunt then hunt.ped = nil end   -- server deleted the carcass
         endHunt()
         if Config.DeleteCarriedPelt then
             Wait(1000)   -- let the game finish handing over the vanilla pelt
-            local carried = carriedEntity(cache.ped)
+            local carried = carriedEntity(PlayerPedId())
             if carried and carried ~= 0 then DeleteEntity(carried) end
         end
     end
@@ -286,7 +295,7 @@ end
 local function addSkinTarget()
     if not hunt or not hunt.ped or hunt.skinTarget then return end
     hunt.skinTarget = true
-    exports.ox_target:addLocalEntity(hunt.ped, {
+    exports['rsg-target']:addLocalEntity(hunt.ped, {
         { name = 'rsg_legendary_skin', icon = 'fa-solid fa-paw', label = locale('target_skin', Config.Animals[hunt.animal].label),
           distance = 3.0,
           onSelect = function()
@@ -302,7 +311,7 @@ local function watchNativeSkin()
             for i = 0, GetNumberOfEvents(0) - 1 do
                 if GetEventAtIndex(0, i) == LOOT_COMPLETE then
                     local view = exports[GetCurrentResourceName()]:DataViewNativeGetEventData(0, i, 3)
-                    if view['4'] == 1 and view['0'] == cache.ped and hunt and view['2'] == hunt.ped then
+                    if view['4'] == 1 and view['0'] == PlayerPedId() and hunt and view['2'] == hunt.ped then
                         CreateThread(claimSkin)
                     end
                 end
@@ -313,22 +322,22 @@ local function watchNativeSkin()
 end
 
 local function huntTick()
-    local pos = GetEntityCoords(cache.ped).xy
+    local pos = GetEntityCoords(PlayerPedId()).xy
 
     if hunt.clue then
         local dist = #(pos - hunt.clue)
         if not hunt.clueZone and dist < Config.ClueZoneDistance then
-            local z = groundZ(hunt.clue.x, hunt.clue.y, GetEntityCoords(cache.ped).z)
+            local z = groundZ(hunt.clue.x, hunt.clue.y, GetEntityCoords(PlayerPedId()).z)
             if z then activateClue(z) end
         elseif hunt.clueZone and dist < 10.0 then
             -- terrain is fully loaded now: rebuild the zone if its height was off
-            local z = groundZ(hunt.clue.x, hunt.clue.y, GetEntityCoords(cache.ped).z)
+            local z = groundZ(hunt.clue.x, hunt.clue.y, GetEntityCoords(PlayerPedId()).z)
             if z and math.abs(z - hunt.clueZ) > 1.5 then
                 activateClue(z)
             end
         end
     elseif hunt.spawn and not hunt.ped then
-        if #(pos - hunt.spawn) < Config.ActivateDistance then
+        if #(pos - hunt.spawn) < Config.ActivateDistance and GetGameTimer() > (hunt.spawnRetry or 0) then
             local z = groundZ(hunt.spawn.x, hunt.spawn.y)
             if z then spawnAnimal(z) end
         end
@@ -350,13 +359,16 @@ local function huntTick()
     end
 end
 
+-- data: { animal, zone, radius, total, found, clue?, spawn?, member? } (also sent on login restore and to group members)
 RegisterNetEvent('rsg-legendary:client:startHunt', function(data)
     endHunt()
-    hunt = { animal = data.animal, total = data.total, clue = data.clue }
+    hunt = { animal = data.animal, total = data.total, clue = data.clue, spawn = data.spawn, member = data.member }
     hunt.zoneBlip = blipForRadius(Config.ZoneBlipStyle, data.zone, data.radius)
-    placeClueBlip()
+    if hunt.clue then placeClueBlip() end
+    if hunt.member then return end   -- group members only see the trail; the owner's client runs the hunt
+    local current = hunt
     CreateThread(function()
-        while hunt do
+        while hunt and hunt == current do
             huntTick()
             Wait(1000)
         end
@@ -373,8 +385,8 @@ RegisterNetEvent('rsg-legendary:client:preview', function(key, preset)
     if not cfg then return end
     if previewPed and DoesEntityExist(previewPed) then DeleteEntity(previewPed) end
     if not loadModel(cfg.model) then return end
-    local c = GetOffsetFromEntityInWorldCoords(cache.ped, 0.0, 5.0, 0.0)
-    previewPed = CreatePed(cfg.model, c.x, c.y, c.z, GetEntityHeading(cache.ped) + 180.0, false, false, false, false)
+    local c = GetOffsetFromEntityInWorldCoords(PlayerPedId(), 0.0, 5.0, 0.0)
+    previewPed = CreatePed(cfg.model, c.x, c.y, c.z, GetEntityHeading(PlayerPedId()) + 180.0, false, false, false, false)
     SetModelAsNoLongerNeeded(cfg.model)
     setOutfitPreset(previewPed, preset)
     FreezeEntityPosition(previewPed, true)

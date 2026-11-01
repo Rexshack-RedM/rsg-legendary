@@ -19,7 +19,8 @@ async function action(name, body) {
 
 function fmtTime(sec) {
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  if (h > 0) return `${h}h ${m}m`;
+  return m > 0 ? `${m}m` : `${Math.floor(sec % 60)}s`;
 }
 
 function render() {
@@ -39,6 +40,22 @@ function render() {
         </div>
         <span class="pill">$${a.price}</span>`;
       if (!cd && !locked) row.addEventListener('click', () => action('buy', { key: a.key }));
+      list.appendChild(row);
+    });
+  } else if (tab === 'trophies') {
+    const t = state.trophies || [];
+    t.forEach(r => {
+      const row = document.createElement('div');
+      row.className = 'row static';
+      const first = r.first ? `${esc(L.first)}: ${esc(r.first)}` : `${esc(L.first)}: ${esc(L.noneyet)}`;
+      const fast = r.fastest ? ` &middot; ${esc(L.fastest)}: ${esc(r.fastest)} (${fmtTime(r.seconds || 0)})` : '';
+      row.innerHTML = `
+        <div class="badge-icon">${r.kills > 0 ? '&#10003;' : '&#10022;'}</div>
+        <div class="row-text">
+          <div class="row-title">${esc(r.label)}</div>
+          <div class="row-desc">${first}${fast}</div>
+        </div>
+        <span class="pill" title="${esc(L.perfect)}">${esc(L.yours)} ${r.kills}${r.perfect ? ` &middot; &#9733;${r.perfect}` : ''}</span>`;
       list.appendChild(row);
     });
   } else {
@@ -70,7 +87,7 @@ function setTab(t) {
 
 document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
 document.getElementById('close').addEventListener('click', () => post('close'));
-document.addEventListener('keyup', e => { if (e.key === 'Escape') post('close'); });
+document.addEventListener('keyup', e => { if (e.key === 'Escape' && !app.classList.contains('hidden')) post('close'); });
 
 window.addEventListener('message', ({ data }) => {
   if (data.action === 'open') {
@@ -79,6 +96,8 @@ window.addEventListener('message', ({ data }) => {
     document.getElementById('ui-subtitle').textContent = L.subtitle;
     document.getElementById('tab-maps').textContent = L.maps;
     document.getElementById('tab-sell').textContent = L.sell;
+    document.getElementById('tab-trophies').textContent = L.trophies;
+    document.getElementById('tab-trophies').classList.toggle('hidden', !state.trophies);
     document.getElementById('ui-cash').textContent = L.cash;
     app.classList.remove('hidden');
     setTab('maps');

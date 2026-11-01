@@ -1,6 +1,5 @@
 -- Discord webhook logger for rsg-legendary (server only)
 local RSGCore = exports['rsg-core']:GetCoreObject()
-lib.locale()
 local W = SvConfig.Webhooks
 
 -- event -> { channel, color, title locale key }

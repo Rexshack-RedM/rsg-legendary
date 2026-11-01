@@ -4,10 +4,10 @@ game 'rdr3'
 lua54 'yes'
 
 description 'rsg-legendary - legendary animal hunting'
-version '3.0.0'
+version '3.1.0'
 
 shared_scripts {
-    '@ox_lib/init.lua',
+    '@rsg-core/shared/locale.lua',
     'shared/config.lua',
 }
 
@@ -36,7 +36,6 @@ files {
 dependencies {
     'rsg-core',
     'rsg-inventory',
-    'ox_lib',
-    'ox_target',
+    'rsg-target',
     'oxmysql',
 }
