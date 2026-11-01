@@ -114,7 +114,7 @@ MySQL.ready(function()
             `last_hunt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             `notified` TINYINT(1) NOT NULL DEFAULT 1,
             PRIMARY KEY (`citizenid`, `animal`)
-        )
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ]])
     if ok then
         -- older installs: add the telegram flag (existing rows count as already notified)
@@ -131,7 +131,7 @@ MySQL.ready(function()
                 PRIMARY KEY (`id`),
                 INDEX `idx_animal` (`animal`),
                 INDEX `idx_citizenid` (`citizenid`)
-            )
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ]])
     end
     if ok then
@@ -141,7 +141,7 @@ MySQL.ready(function()
                 `data` LONGTEXT NOT NULL,
                 `expires` INT NOT NULL,
                 PRIMARY KEY (`citizenid`)
-            )
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ]])
     end
     if not ok then
@@ -572,7 +572,7 @@ if Config.CooldownTelegram.Enabled then
             if DbReady and GetResourceState('rsg-telegram') == 'started' then
                 local rows = MySQL.query.await([[
                     SELECT c.citizenid, c.animal, p.charinfo FROM rsg_legendary_cooldowns c
-                    LEFT JOIN players p ON p.citizenid = c.citizenid
+                    LEFT JOIN players p ON p.citizenid COLLATE utf8mb4_unicode_ci = c.citizenid COLLATE utf8mb4_unicode_ci
                     WHERE c.notified = 0 AND c.last_hunt <= (NOW() - INTERVAL ? HOUR) LIMIT 50
                 ]], { Config.CooldownHours }) or {}
                 for _, r in ipairs(rows) do
