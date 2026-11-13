@@ -100,4 +100,4 @@ The server owns the hunt: map use, clue distance, animal registration, skin dist
 | Hunt gone after restart | Check `SaveHunts` and the `rsg_legendary_hunts` table |
 | Animal didn't appear | Get within `ActivateDistance` of the spawn point after the last clue |
 
-Support: https://buymeacoffee.com/rexshack
+Support the Project : https://rexshack.tebex.store/
